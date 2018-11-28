@@ -1,25 +1,36 @@
 #include <gtk/gtk.h>
+#include <gdk-pixbuf/gdk-pixbuf.h>
 #include <glib.h>
 #include <stdlib.h>
 #include <time.h>
 #include "imagem.h"
 #include "meufiltro.h"
 
-GtkWidget *window, *image;
+GtkWidget *window, *image, *imageFundo;
 GtkWidget *vbox, *hbox;
-GtkWidget *label1, *label2;
-char *nomeArquivo;
+GtkWidget *label1, *label2, *label3;
+GdkRGBA cor = {0, 1, 0, 1};
+char *nomeArquivo, *nomeArquivoFundo;
+
+
+/*#include <glib.h>
+#include <gdk/gdk.h>
+
+GtkWidget *colorseldlg = NULL;
+GtkWidget *drawingarea = NULL;
+GdkColor color;
+*/
 
 void printImagemInfo(Imagem img) {
 	printf("Imagem %d %d, ch %d\n", img.w, img.h, img.numCanais);
 }
 
-Imagem obterMatrizImagem() {
+Imagem obterMatrizImagem(GtkWidget *imgWidget) {
 	int i, j, ch, rowstride;
 	guchar ***m, *pixels, *p;
 	Imagem img;
 	
-	GdkPixbuf *buffer = gtk_image_get_pixbuf(GTK_IMAGE(image));
+	GdkPixbuf *buffer = gtk_image_get_pixbuf(GTK_IMAGE(imgWidget));
 	img.h = gdk_pixbuf_get_height(buffer);
 	img.w = gdk_pixbuf_get_width(buffer);
 	img.numCanais = gdk_pixbuf_get_n_channels(buffer);
@@ -45,10 +56,8 @@ Imagem obterMatrizImagem() {
 	return img;
 }
 
-
 void carregarImagem(GtkWidget *widget, gpointer data) {
 	GtkWidget *dialog = gtk_file_chooser_dialog_new("Abrir arquivo", GTK_WINDOW(window), GTK_FILE_CHOOSER_ACTION_OPEN, "_Cancel", GTK_RESPONSE_CANCEL, "_Open", GTK_RESPONSE_ACCEPT, NULL);
-
 	if(gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT) {
 		nomeArquivo = gtk_file_chooser_get_filename( GTK_FILE_CHOOSER(dialog) );
 		gtk_widget_destroy(dialog);
@@ -59,14 +68,34 @@ void carregarImagem(GtkWidget *widget, gpointer data) {
 	gtk_widget_queue_draw(image);
 
 	gtk_label_set_text(GTK_LABEL(label1), "Imagem carregada");
-	original = obterMatrizImagem();
+	original = obterMatrizImagem(image);
+}
+
+void carregarImagemFundo(GtkWidget *widget, gpointer data) {
+	GtkWidget *dialog = gtk_file_chooser_dialog_new("Abrir arquivo", GTK_WINDOW(window), GTK_FILE_CHOOSER_ACTION_OPEN, "_Cancel", GTK_RESPONSE_CANCEL, "_Open", GTK_RESPONSE_ACCEPT, NULL);
+	if(gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT) {
+		nomeArquivoFundo = gtk_file_chooser_get_filename( GTK_FILE_CHOOSER(dialog) );
+		gtk_widget_destroy(dialog);
+	}
+	
+	gtk_image_set_from_file(GTK_IMAGE(imageFundo), nomeArquivoFundo);
+	GdkPixbuf *pixbuf =	gtk_image_get_pixbuf(GTK_IMAGE(imageFundo));
+	printf("fundo %d %d\n", original.w, original.h);
+
+	pixbuf = gdk_pixbuf_scale_simple(pixbuf, original.w, original.h, GDK_INTERP_BILINEAR);
+	
+	gtk_image_set_from_pixbuf(GTK_IMAGE(imageFundo), pixbuf);
+	
+	gtk_label_set_text(GTK_LABEL(label1), "Imagem carregada");
+	imagemFundo = obterMatrizImagem(imageFundo);
+	printf("%d\n",imagemFundo.h);
 }
 
 void salvarImagem(GtkWidget *widget, gpointer data) {
 
 	GtkWidget *dialog = gtk_file_chooser_dialog_new("Nome arquivo", (GtkWindow *) window, GTK_FILE_CHOOSER_ACTION_SAVE, "_Cancel", GTK_RESPONSE_CANCEL, "_Open", GTK_RESPONSE_ACCEPT, NULL);
 	char *nomeDestino;
-
+	printf ("%d", *((int *) data));
 	if(gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT) {
 		nomeDestino = gtk_file_chooser_get_filename( GTK_FILE_CHOOSER(dialog) );
 		gtk_widget_destroy(dialog);
@@ -81,8 +110,11 @@ void atualizarGtkImage(Imagem img) {
 	int i, j, ch;
 
 	GdkPixbuf *buffer = gtk_image_get_pixbuf(GTK_IMAGE(image));
-	GdkPixbuf *newbuffer = gdk_pixbuf_copy(buffer);
-	int rowstride = gdk_pixbuf_get_rowstride(buffer);
+	//GdkPixbuf *newbuffer = gdk_pixbuf_copy(buffer);
+	GdkPixbuf *newbuffer = gdk_pixbuf_new(gdk_pixbuf_get_colorspace(buffer), gdk_pixbuf_get_has_alpha(buffer), gdk_pixbuf_get_bits_per_sample(buffer), img.w, img.h);
+	//printf("Novo buffer com colorspace %d, alpha %d, bits/sample %d, width %d, height %d\n", gdk_pixbuf_get_colorspace(buffer), gdk_pixbuf_get_has_alpha(buffer), gdk_pixbuf_get_bits_per_sample(buffer), img.w, img.h);
+
+	int rowstride = gdk_pixbuf_get_rowstride(newbuffer);
 
 	guchar *pixels = gdk_pixbuf_get_pixels(newbuffer);
 	guchar *p;
@@ -109,11 +141,18 @@ void funcaoAplicar(GtkWidget *widget, gpointer data) {
 
 	funcaoRestaurar(NULL, NULL);
 	//Imagem img = obterMatrizImagem(image);
-	Imagem res = meuFiltro(original);
+	Imagem res = meuFiltro(original, imagemFundo, cor);
 	atualizarGtkImage(res);
 	desalocarImagem(res);
 	gtk_label_set_text(GTK_LABEL(label1), "Filtro aplicado");
 }   
+
+static void selecionarCor (GObject *o, GParamSpec *pspect,  gpointer data) {
+	gtk_color_chooser_get_rgba(GTK_COLOR_CHOOSER(o), &cor);
+	cor.red*=255;
+	cor.green*=255;
+	cor.blue*=255;
+}
 
 
 int main(int argc, char **argv) {
@@ -153,7 +192,8 @@ int main(int argc, char **argv) {
 
 	//cria um botao com titulo carregar imagem
 	GtkWidget *botaoCarregar = gtk_button_new_with_label("Carregar Imagem");
-
+	//cria um botao com titulo carregar imagem de fundo
+	GtkWidget *botaoCarregarFundo = gtk_button_new_with_label("Carregar Imagem de Fundo");
 	//cria um botao com titulo aplicar filtro
 	GtkWidget *botaoAplicar = gtk_button_new_with_label("Aplicar Filtro");
 
@@ -163,8 +203,15 @@ int main(int argc, char **argv) {
 	//cria um botao para salvar imagem
 	GtkWidget *botaoSalvar = gtk_button_new_with_label("Salvar Imagem");
 
+
+	GtkWidget *botaoCor = gtk_color_button_new ();
+
+	gtk_color_button_set_rgba (botaoCor, &cor);
+	
 	//cria um frame para colocar as opcoes do filtro
 	GtkWidget *frameFiltro = gtk_frame_new("Opções do filtro");
+
+
 
 	//cria um scrolled window para inserir a imagem
 	GtkWidget *scrolledWindow = gtk_scrolled_window_new(gtk_adjustment_new(0, 0, 100, 1, 1, 1), gtk_adjustment_new(0, 0, 100, 1, 1, 1));
@@ -174,21 +221,27 @@ int main(int argc, char **argv) {
 
 	//altera o tamanho do botao carregar
 	gtk_widget_set_size_request(botaoCarregar, 70, 30);
+	//altera o tamanho do botao carregar
+	gtk_widget_set_size_request(botaoCarregarFundo, 70, 30);
 	//altera o tamanho do botao aplicar
 	gtk_widget_set_size_request(botaoAplicar, 70, 30);
 
 	//adiciona os botoes no container horizontal (hbox)
 	gtk_container_add(GTK_CONTAINER(hbox), botaoCarregar);
+	gtk_container_add(GTK_CONTAINER(hbox), botaoCarregarFundo);
 	gtk_container_add(GTK_CONTAINER(hbox), botaoAplicar);
 	gtk_container_add(GTK_CONTAINER(hbox), botaoRestaurar);
 	gtk_container_add(GTK_CONTAINER(hbox), botaoSalvar);
+	gtk_container_add(GTK_CONTAINER(hbox), botaoCor);
 
 	//cria labels
 	label1 = gtk_label_new("Carregue uma imagem");
 	label2 = gtk_label_new("Aplicação de Filtros");
+	label3 = gtk_label_new("Carregue uma imagem de fundo");
 
 	//adiciona um widget imagem vazio
 	image = gtk_image_new();
+	imageFundo = gtk_image_new();
 
 	//adiciona os demais widgets no container vertical (vbox)
 	//a funcao gtk_box_pack_start eh similar a gtk_container_add
@@ -199,6 +252,7 @@ int main(int argc, char **argv) {
 	gtk_box_pack_start(GTK_BOX(vbox), hbox, FALSE, FALSE, 0);
 	gtk_box_pack_start(GTK_BOX(vbox), label1, FALSE, FALSE, 0);
 	gtk_box_pack_start(GTK_BOX(vbox), label2, FALSE, FALSE, 0);
+	gtk_box_pack_start(GTK_BOX(vbox), label3, FALSE, FALSE, 0);
 	gtk_box_pack_start(GTK_BOX(vbox), frameFiltro, FALSE, FALSE, 0);
 
 	adicionarWidgetsMeuFiltro(frameFiltro);
@@ -206,8 +260,23 @@ int main(int argc, char **argv) {
 	//adiciona o vbox na janela (window)
 	gtk_container_add(GTK_CONTAINER(window), vbox);
 
+	if(argc > 1) {
+		nomeArquivo = argv[1];
+		FILE *arq = fopen(nomeArquivo, "r");
+		if(arq) {
+			gtk_image_set_from_file(GTK_IMAGE(image), nomeArquivo);
+			gtk_widget_queue_draw(image);
+	
+			gtk_label_set_text(GTK_LABEL(label1), "Imagem carregada");
+			original = obterMatrizImagem(image);
+			fclose(arq);
+		}
+	}
 	//conecta o evento clicked do botaoCarregar a funcao carregarImagem
 	g_signal_connect(G_OBJECT(botaoCarregar), "clicked", G_CALLBACK(carregarImagem), NULL);
+
+	//conecta o evento clicked do botaoCarregar a funcao carregarImagem
+	g_signal_connect(G_OBJECT(botaoCarregarFundo), "clicked", G_CALLBACK(carregarImagemFundo), NULL);
 
 	//conecta o evento clicked do botaoAplicar a funcaoTeste (argv[0] eh o argumento)
 	g_signal_connect(G_OBJECT(botaoAplicar), "clicked", G_CALLBACK(funcaoAplicar), NULL);
@@ -218,6 +287,8 @@ int main(int argc, char **argv) {
 	//conecta o evento clicked do botaoSalvar a funcao salvarImagem
 	g_signal_connect(G_OBJECT(botaoSalvar), "clicked", G_CALLBACK(salvarImagem), NULL);
 
+	//g_signal_connect(G_OBJECT(botaoCor), "clicked", G_CALLBACK(selecionarCor), NULL);
+	g_signal_connect (botaoCor, "notify::color", G_CALLBACK (selecionarCor), NULL);
 	//conecta o evento destroy da janela a
 	g_signal_connect_swapped(G_OBJECT(window), "destroy", G_CALLBACK(gtk_main_quit), NULL);
 

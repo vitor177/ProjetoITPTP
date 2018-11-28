@@ -1,54 +1,107 @@
 #include "meufiltro.h"
 
 void inicializarWidgetsMeuFiltro() {
-	//widgets das opcoes de filtro
-	widgetControleNivel = 	gtk_scale_new_with_range(GTK_ORIENTATION_HORIZONTAL, 0, 30, 1);
-	widgetMisturarCanais = gtk_check_button_new_with_label("Misturar canais");
-	g_signal_connect(G_OBJECT(widgetControleNivel), "value-changed", G_CALLBACK(funcaoAplicar), NULL);
 }
 
 void adicionarWidgetsMeuFiltro(GtkWidget *container) {
 
-	GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
-	gtk_container_set_border_width(GTK_CONTAINER(vbox), 20);
-	gtk_container_add(GTK_CONTAINER(container), vbox);
-	gtk_container_add(GTK_CONTAINER(vbox), widgetControleNivel);
-	gtk_container_add(GTK_CONTAINER(vbox), widgetMisturarCanais);
+
 }
 
-Imagem meuFiltro(Imagem origem) {
-	int i, j;
-	Imagem destino = alocarImagem(origem);
-	int nivel = (int) gtk_range_get_value(GTK_RANGE(widgetControleNivel));
-	int ch1, ch2, ch3;
 
-	ch1 = 0;
-	ch2 = 1;
-	ch3 = 2;
-	if(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(widgetMisturarCanais))) {
-		ch1 = rand()%3;
-		ch2 = (ch1+1+rand()%2)%3;
-		ch3 = 3 - ch2 - ch1;
-	}
+struct RGB
+{
+    unsigned char R;
+    unsigned char G;
+    unsigned char B;
+};
 
-	for(j = 0; j < destino.w; j++) {
-		for(i = 0; i < destino.h; i++) {
-			int x = j - nivel + rand()%(2*nivel+1);
-			int y = i - nivel + rand()%(2*nivel+1);
-			if(x < 0)
-				x = 0;
-			if(y < 0)
-				y = 0;
-			if(x >= destino.w)
-				x = destino.w - 1;
-			if(y >= destino.h)
-				y = destino.h - 1;
-			destino.m[i][j][0] = origem.m[y][x][ch1];
-			destino.m[i][j][1] = origem.m[y][x][ch2];
-			destino.m[i][j][2] = origem.m[y][x][ch3];
-		}
-	}
-	return destino;
+struct HSV
+{
+    double H;
+    double S;
+    double V;
+};
+
+static double Min(double a, double b) {
+    return a <= b ? a : b;
 }
+
+static double Max(double a, double b) {
+    return a >= b ? a : b;
+}
+
+struct HSV RGBToHSV(struct RGB rgb) {
+    double delta, min;
+    double h = 0, s, v;
+
+    min = Min(Min(rgb.R, rgb.G), rgb.B);
+    v = Max(Max(rgb.R, rgb.G), rgb.B);
+    delta = v - min;
+
+    if (v == 0.0)
+        s = 0;
+    else
+        s = delta / v;
+
+    if (s == 0)
+        h = 0.0;
+
+    else
+  
+    {
+        if (rgb.R == v)
+            h = (rgb.G - rgb.B) / delta;
+        else if (rgb.G == v)
+            h = 2 + (rgb.B - rgb.R) / delta;
+        else if (rgb.B == v)
+            h = 4 + (rgb.R - rgb.G) / delta;
+
+        h *= 60;
+
+        if (h < 0.0)
+            h = h + 360;
+    }
+
+    struct HSV hsv;
+    hsv.H = h;
+    hsv.S = s;
+    hsv.V = v / 255;
+
+    return hsv;
+}
+
+Imagem meuFiltro(Imagem origem,Imagem fundo, GdkRGBA cor) {
+    struct RGB corFundoRGB ={(int) cor.red,(int) cor.green,(int) cor.blue};
+    struct HSV corFundo = RGBToHSV(corFundoRGB);
+    Imagem destino = alocarImagem(origem);
+    for(int a = 0;a<origem.h;a++){
+        for(int b = 0;b<origem.w;b++){
+            struct RGB rgb ={origem.m[a][b][0],origem.m[a][b][1],origem.m[a][b][0]};
+            struct HSV hsv = RGBToHSV(rgb);
+            //if(origem.m[a][b][0] >= 0 && origem.m[a][b][0] <= 80  && origem.m[a][b][1] >= 100 && origem.m[a][b][1] <= 255  && origem.m[a][b][3] >= 0 && origem.m[a][b][3] <= 80){
+            if(hsv.H >= corFundo.H-30 && hsv.H <= corFundo.H+30 && hsv.S >= 0.15 && hsv.V > 0.15){
+                //if((origem.m[a][b][0]*origem.m[a][b][2]) !=0 && (origem.m[a][b][1]*origem.m[a][b][1]) / (origem.m[a][b][0]*origem.m[a][b][2]) >= 1.5){
+                    destino.m[a][b][0] = fundo.m[a][b][0];
+                    destino.m[a][b][1] = fundo.m[a][b][1];
+                    destino.m[a][b][2] = fundo.m[a][b][2];
+                /*}else{
+                    destino.m[a][b][0] = (int)(fundo.m[a][b][0]*1.2);
+                    destino.m[a][b][1] = (int)fundo.m[a][b][1];
+                    destino.m[a][b][2] = (int)(fundo.m[a][b][2]*1.2);
+                }*/
+            }else{
+                destino.m[a][b][0] = origem.m[a][b][0];
+                destino.m[a][b][1] = origem.m[a][b][1];
+                destino.m[a][b][2] = origem.m[a][b][2];
+            }
+        }
+    }
+    return destino;
+}
+
+
+
+
 
 
